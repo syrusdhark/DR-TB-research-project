@@ -1,0 +1,45 @@
+============================================================
+DR-TB PREDICTION REPORT
+============================================================
+
+PREDICTION SUMMARY
+------------------------------------------------------------
+Prediction: Normal
+Probability: 42.73%
+Confidence: 83.0%%
+Risk Level: Low
+
+Interpretation: The model predicts Normal (non-DR-TB) with high confidence. However, this does not rule out tuberculosis entirely. Clinical correlation and follow-up are recommended if symptoms persist.
+
+MEDICATION HISTORY
+------------------------------------------------------------
+Not provided.
+
+IDENTIFIED RISK FACTORS
+------------------------------------------------------------
+No significant risk factors identified.
+
+GENOMIC MUTATION ANALYSIS
+------------------------------------------------------------
+Total Mutations Detected: 0
+
+Interpretation: No resistance mutations detected in the analyzed genomic regions.
+
+MODALITY CONTRIBUTIONS
+------------------------------------------------------------
+CXR Image: 33.7%
+Clinical Data: 31.7%
+Genomic Data: 34.7%
+Primary Modality: Genomic Data
+
+CLINICAL RECOMMENDATIONS
+------------------------------------------------------------
+[Medium Priority] Clinical Correlation
+  Correlate with patient symptoms, history, and physical examination findings.
+
+[Medium Priority] Follow-up Imaging
+  Consider follow-up chest imaging to monitor treatment response.
+
+============================================================
+End of Report
+============================================================

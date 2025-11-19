@@ -1,0 +1,26 @@
+.DS_Store
+*.pyc
+__pycache__/
+.vscode/
+.python-version
+venv/
+
+# Large datasets and raw sources (exclude from repo)
+data/
+data tables/
+data_sources/
+crptic_reuseability/
+cryptic_reuse/
+TB_Chest_Radiography_Database/
+
+# Intermediate artifacts
+results/*
+!results/models/
+results/models/*
+!results/models/*.pth
+!results/models/*.json
+results/models/multimodal_fusion_best_*.pth
+
+# Streamlit cache
+.streamlit/
+
