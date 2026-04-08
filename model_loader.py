@@ -80,21 +80,21 @@ def load_model(model_path=None, device=None):
     except RuntimeError as e:
         # If strict loading fails, try flexible loading
         # This handles architecture differences between training and inference versions
-        print("⚠️  Strict loading failed, attempting flexible loading...")
-        print("   ℹ️  This usually means the model was saved with a different architecture version.")
+        print("[WARN] Strict loading failed, attempting flexible loading...")
+        print("   [INFO] This usually means the model was saved with a different architecture version.")
         try:
             missing_keys, unexpected_keys = model.load_state_dict(model_state, strict=False)
             if missing_keys:
-                print(f"   ⚠️  Missing keys (using random initialization): {len(missing_keys)} keys")
+                print(f"   [WARN] Missing keys (using random initialization): {len(missing_keys)} keys")
                 # Only warn about critical missing keys
                 critical_missing = [k for k in missing_keys if 'classifier' in k or 'fusion' in k]
                 if critical_missing:
-                    print(f"   ⚠️  WARNING: Critical fusion/classifier layers missing!")
+                    print(f"   [WARN] WARNING: Critical fusion/classifier layers missing!")
                     print(f"      This may affect prediction accuracy.")
                     print(f"      Missing: {', '.join(critical_missing[:3])}...")
             if unexpected_keys:
-                print(f"   ℹ️  Unexpected keys in checkpoint (ignored): {len(unexpected_keys)} keys")
-            print("   ✅ Model loaded with flexible matching (some layers use random weights)")
+                print(f"   [INFO] Unexpected keys in checkpoint (ignored): {len(unexpected_keys)} keys")
+            print("   [OK] Model loaded with flexible matching (some layers use random weights)")
         except Exception as e2:
             raise RuntimeError(f"Failed to load model weights even with flexible loading: {e2}")
     
@@ -102,7 +102,7 @@ def load_model(model_path=None, device=None):
     model = model.to(device)
     model.eval()
     
-    print(f"✅ Model loaded successfully on {device}")
+    print(f"[OK] Model loaded successfully on {device}")
     print(f"   • Clinical features: {num_clinical}")
     print(f"   • Genomic features: {num_genomic}")
     
