@@ -11,10 +11,31 @@ MODELS_DIR = BASE_DIR / "results" / "models"
 DATA_DIR = BASE_DIR / "data"
 
 # Model configuration
-IMG_SIZE = 380
-OPTIMAL_THRESHOLD = 0.638  # From evaluation_results.json
+# Downsized from the original 380 (EfficientNet-B4's native input) to 192.
+# The Stage 1 TB classifier is now a compact CNN trained from scratch on CPU
+# in this environment (see model.py), and 380x380 training was too slow on
+# CPU to be practical here. Raise this back to 380 if retraining with a
+# pretrained EfficientNet-B4 backbone on a GPU-equipped environment.
+IMG_SIZE = 192
 NUM_CLINICAL_FEATURES = 14
 NUM_GENOMIC_FEATURES = 12
+
+# Two-stage pipeline:
+#   Stage 1 (tb_classifier)  : CXR image        -> TB vs Normal
+#   Stage 2 (drtb_risk_model): clinical + genomic -> DR-TB risk
+# These replaced the single fused CXR+clinical+genomic model. That model's
+# training data paired each real X-ray with independently-generated
+# synthetic clinical/genomic records (the same image appeared under both
+# DR-TB-positive and DR-TB-negative labels), so the image could not have
+# carried real signal for the resistance decision. See PROJECT_OVERVIEW.md.
+TB_MODEL_PREFIX = "tb_classifier"
+DRTB_RISK_MODEL_PREFIX = "drtb_risk_model"
+
+# Thresholds are set from each stage's own validation results
+# (results/models/*_metrics.json) after training; these are fallback
+# defaults used only if a metrics file isn't found.
+DEFAULT_TB_THRESHOLD = 0.5
+DEFAULT_DRTB_RISK_THRESHOLD = 0.5
 
 # Clinical feature names (in order)
 CLINICAL_FEATURES = [
@@ -433,16 +454,36 @@ RISK_FACTOR_DESCRIPTIONS = {
     'injecting_drug_use': COMORBIDITY_DESCRIPTIONS['injecting_drug_use']['description'],
 }
 
-def get_latest_model_path():
-    """Get the path to the latest model checkpoint."""
+def get_latest_model_path(prefix=None):
+    """Get the path to the latest model checkpoint matching an optional filename prefix."""
     if not MODELS_DIR.exists():
         return None
-    
-    model_files = list(MODELS_DIR.glob("*.pth"))
+
+    pattern = f"{prefix}*.pth" if prefix else "*.pth"
+    model_files = list(MODELS_DIR.glob(pattern))
     if not model_files:
         return None
-    
+
     # Sort by modification time, get latest
     latest_model = max(model_files, key=lambda p: p.stat().st_mtime)
     return latest_model
+
+
+def get_threshold_for_model(model_path, default_threshold):
+    """Read the optimal_threshold from a model's companion *_metrics.json, if present."""
+    if model_path is None:
+        return default_threshold
+
+    model_path = Path(model_path)
+    metrics_path = model_path.with_name(model_path.stem + "_metrics.json")
+    if not metrics_path.exists():
+        return default_threshold
+
+    try:
+        import json
+        with open(metrics_path) as f:
+            metrics = json.load(f)
+        return float(metrics.get("optimal_threshold", default_threshold))
+    except (ValueError, OSError, json.JSONDecodeError):
+        return default_threshold
 

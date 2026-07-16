@@ -2,81 +2,110 @@
 
 ## 🎯 Project Description
 
-A **multimodal deep learning system** for predicting **Drug-Resistant Tuberculosis (DR-TB)** using a combination of:
-- **Chest X-Ray (CXR) Images** - Visual analysis using EfficientNet-B4
-- **Clinical Metadata** - Patient demographics and medical history
-- **Genomic Mutations** - Resistance mutation patterns
+A **two-stage deep learning system** for TB screening and drug-resistance risk assessment:
+- **Stage 1 — TB Detection**: a CXR-image-only model (chest X-ray → TB vs Normal)
+- **Stage 2 — DR-TB Risk**: a clinical + genomic-only model (patient profile → drug-resistance risk)
 
-The system provides both simple predictions and detailed diagnostic reports to assist healthcare professionals in early detection and diagnosis of drug-resistant tuberculosis.
+The system provides both simple predictions and detailed diagnostic reports to assist healthcare professionals in early detection and drug-resistance risk triage.
+
+---
+
+## 🆕 Current Snapshot (2026-07-16)
+
+- **Architecture change**: the previous single fused model (CXR + clinical + genomic → one DR-TB prediction) was replaced with two independent models. See "Why two stages?" below — the fused model's image branch had no valid basis to inform the resistance decision.
+- **Deployment state**: Streamlit UI (`app.py`) remains the primary entry point; inference runs locally with Python 3.12, PyTorch, on CPU or GPU.
+- **Model health**: Stage 2 (DR-TB risk) reaches very high validation/test metrics because its label is deterministically derived from a subset of its own input fields — see `results/models/drtb_risk_model_metrics.json` for the exact numbers and caveat. Stage 1 (TB detection) is a compact CNN trained from scratch (no ImageNet pretraining was available in the training environment — see below) — see `results/models/tb_classifier_metrics.json`.
+- **Known limitation**: Stage 1 was trained without ImageNet-pretrained weights because `download.pytorch.org` and `huggingface.co` were both blocked by the training environment's network policy. A pretrained EfficientNet-B4 backbone (the original design) should outperform this from-scratch CNN and is recommended if retraining somewhere with normal network access — see `model.py`'s `TBImageClassifier` docstring for the exact swap.
+- **Stale artifacts**: `DR_TB_using_RoMIA.ipynb` still defines the old fused-model architecture inline and is out of date relative to `model.py`. Treat `train_tb_classifier.py` and `train_drtb_risk.py` as the canonical training path, not the notebook.
 
 ---
 
-## 🆕 Current Snapshot (2025-11-19)
+## Why two stages? (the bug this replaced)
 
-- **Deployment state**: Streamlit UI (`app.py`) remains the primary entry point; inference runs locally with Python 3.12, PyTorch 2.9.1, and EfficientNet-B4 weights in `results/models/`.
-- **Modalities in use**: 380x380 CXR uploads, 14-feature clinical form inputs, and 12 curated genomic mutation toggles feed the multimodal fusion pipeline without schema drift.
-- **Model health**: Latest evaluation metrics (AUROC 0.933, Accuracy 87.5%, Recall 93.8%, threshold 0.638) are stored in `results/evaluation_results.json` and visualized via `results/roc_curve.png` and friends.
-- **Operational caveats**: Checkpoint-to-architecture mismatches persist for some fusion layers; predictions remain functional but require retraining with aligned weights for peak accuracy.
-- **Immediate focus**: Track the retraining effort, batch prediction support, PDF export, and model versioning—currently the highest-impact roadmap items before any clinical pilot.
+The original model fused a CXR image with clinical and genomic features into
+one DR-TB prediction. Its training data (`merged_dataset.csv`) reused each of
+the 4,200 real chest X-ray images up to 53 times, pairing the same image with
+different independently-generated synthetic patient records to manufacture a
+balanced (50/50) label. That means the same X-ray appeared in training under
+both DR-TB-positive and DR-TB-negative labels — so the image branch could not
+have learned any real signal for the resistance decision. This is also
+consistent with domain knowledge: chest X-ray appearance is not a validated
+indicator of drug-resistance status in the first place (resistance is a
+genomic/phenotypic property).
 
----
+Separately, the label itself (`label_drtb` in the old merged dataset)
+contradicted the fields it should be derived from — e.g. patients with both
+MDR-TB and XDR-TB confirmed were labeled DR-TB-**negative** 100% of the time.
+The current Stage 2 dataset (`data/drtb_risk_dataset.csv`, built by
+`prepare_stage2_data.py`) instead derives the label deterministically and
+consistently:
+```
+label_drtb = 1  if  mdr_tb OR xdr_tb OR rifampin_resistance
+                    OR isoniazid_resistance OR mutation_count >= 1
+             0  otherwise
+```
 
 ## 🏗️ System Architecture
 
-### Model Architecture: Multimodal Fusion Model
+### Stage 1: TB Image Classifier (`TBImageClassifier`)
 
 ```
 ┌─────────────────┐
-│  CXR Image      │ → EfficientNet-B4 → 1792 features
-│  (380x380)      │
+│  CXR Image      │ → Compact CNN (5 conv blocks) → TB / Normal
+│  (192x192)      │
 └─────────────────┘
-         │
-         ├─────────────────┐
-         │                 │
-┌────────▼────────┐  ┌─────▼──────────┐
+```
+Trained on `data/tb_image_manifest.csv` — every real image in
+`TB_Chest_Radiography_Database` used exactly once, labeled from its source
+folder (no duplication, no synthetic pairing).
+
+### Stage 2: DR-TB Risk Model (`DRTBRiskModel`)
+
+```
+┌─────────────────┐  ┌─────────────────┐
 │ Clinical Data   │  │ Genomic Data    │
 │ (14 features)   │  │ (12 mutations)  │
-└─────────────────┘  └─────────────────┘
-         │                 │
-         └────────┬────────┘
-                  │
-         ┌────────▼────────┐
-         │ Multi-Head      │
-         │ Attention       │
-         │ Fusion          │
-         └────────┬────────┘
-                  │
-         ┌────────▼────────┐
-         │ Classification  │
-         │ Head            │
-         └────────┬────────┘
-                  │
-         ┌────────▼────────┐
-         │ DR-TB / Normal  │
-         │ Prediction      │
-         └─────────────────┘
+└────────┬────────┘  └────────┬────────┘
+         │                    │
+         └─────────┬──────────┘
+                    │
+           ┌────────▼────────┐
+           │ Multi-Head      │
+           │ Attention       │
+           │ Fusion (2-way)  │
+           └────────┬────────┘
+                    │
+           ┌────────▼────────┐
+           │ Classification  │
+           │ Head            │
+           └────────┬────────┘
+                    │
+           ┌────────▼────────┐
+           │ DR-TB Risk /    │
+           │ Low Risk        │
+           └─────────────────┘
 ```
+No image input. Trained on `data/drtb_risk_dataset.csv` — 4,200 unique
+patients (one row each) from `clinical_data.csv` + `genomic_mutations.csv`.
 
 ### Key Components
 
-1. **CXR Encoder**: EfficientNet-B4 (pre-trained on ImageNet)
-2. **Clinical Encoder**: Multi-layer neural network (14 features)
-3. **Genomic Encoder**: Multi-layer neural network (12 mutation types)
-4. **Fusion Layer**: Multi-head attention mechanism
-5. **Classifier**: Binary classification (DR-TB vs Normal)
+1. **Stage 1 — CXR Encoder**: compact CNN trained from scratch (5 conv blocks, ~1M params)
+2. **Stage 2 — Clinical Encoder**: multi-layer neural network (14 features)
+3. **Stage 2 — Genomic Encoder**: multi-layer neural network (12 mutation types)
+4. **Stage 2 — Fusion Layer**: multi-head attention between clinical and genomic embeddings only
+5. **Two independent classifiers**: TB vs Normal (Stage 1), DR-TB Risk vs Low Risk (Stage 2)
 
 ---
 
 ## 📊 Model Performance
 
-Based on evaluation results:
-
-- **AUROC**: 0.933 (93.3%)
-- **Accuracy**: 87.5%
-- **Precision**: 16.1%
-- **Recall**: 93.8%
-- **F1-Score**: 0.275
-- **Optimal Threshold**: 0.638
+See `results/models/tb_classifier_metrics.json` and
+`results/models/drtb_risk_model_metrics.json` for current numbers (both
+include the optimal decision threshold used at inference). Stage 2's metrics
+are expected to be very high because its label is a deterministic function of
+a subset of its own inputs — that reflects the label's construction, not a
+claim of predictive power beyond it.
 
 ---
 
@@ -159,18 +188,24 @@ DR-TB research project/
 ├── QUICK_START.md              # Quick start guide
 ├── PROJECT_OVERVIEW.md         # This file
 │
+├── prepare_stage1_data.py       # Builds data/tb_image_manifest.csv (Stage 1)
+├── prepare_stage2_data.py       # Builds data/drtb_risk_dataset.csv (Stage 2)
+├── train_tb_classifier.py       # Trains Stage 1 (TB image classifier)
+├── train_drtb_risk.py           # Trains Stage 2 (DR-TB risk model)
+│
 ├── data/
-│   ├── merged_dataset.csv      # Combined training dataset
-│   ├── clinical_data.csv       # Clinical metadata
-│   ├── genomic_mutations.csv   # Genomic mutation data
-│   └── cache/                  # Cached data
+│   ├── merged_dataset.csv       # DEPRECATED -- old fused-model dataset, no longer used (see "Why two stages?")
+│   ├── clinical_data.csv        # Per-patient clinical metadata (4,200 patients)
+│   ├── genomic_mutations.csv    # Per-patient genomic mutation data (4,200 patients)
+│   ├── tb_image_manifest.csv    # Stage 1 training manifest (1 row per real image)
+│   └── drtb_risk_dataset.csv    # Stage 2 training table (1 row per patient)
 │
 ├── results/
-│   ├── models/                 # Trained model checkpoints (.pth)
-│   ├── evaluation_results.json # Model performance metrics
-│   ├── confusion_matrix.png    # Evaluation visualization
-│   ├── roc_curve.png          # ROC curve
-│   └── precision_recall_curve.png
+│   └── models/
+│       ├── tb_classifier.pth               # Stage 1 checkpoint
+│       ├── tb_classifier_metrics.json      # Stage 1 evaluation metrics + threshold
+│       ├── drtb_risk_model.pth             # Stage 2 checkpoint
+│       └── drtb_risk_model_metrics.json    # Stage 2 evaluation metrics + threshold
 │
 ├── TB_Chest_Radiography_Database/
 │   ├── Tuberculosis/           # TB CXR images
@@ -235,35 +270,28 @@ DR-TB research project/
 
 ### ✅ Completed Features
 
-- [x] Multimodal model architecture (CXR + Clinical + Genomic)
-- [x] Model training pipeline
-- [x] Web interface with Streamlit
+- [x] Two-stage architecture: TB detection (image-only) + DR-TB risk (clinical/genomic-only)
+- [x] Model training pipelines for both stages, with clean data preparation scripts
+- [x] Web interface with Streamlit showing both results separately
 - [x] Image upload and preprocessing
 - [x] Clinical data input forms
 - [x] Genomic mutation selection
 - [x] Real-time prediction
-- [x] Simple prediction display
-- [x] Detailed diagnostic reports
+- [x] Detailed diagnostic reports covering both stages
 - [x] Risk factor analysis
 - [x] Report export functionality
-- [x] Model loading with flexible architecture matching
 - [x] Additional medical history fields (COPD, Asthma, Pneumonia, COVID-19)
 
 ### ⚠️ Known Issues
 
-1. **Architecture Mismatch**: 
-   - Saved model checkpoints use a slightly different architecture
-   - Model loads with flexible matching but some layers use random initialization
-   - **Impact**: Predictions may be less accurate
-   - **Solution**: Retrain model with current architecture or use matching checkpoint
-
-2. **Model Compatibility**:
-   - Some fusion layers are missing from saved checkpoints
-   - App works but accuracy may be affected
+1. **Stage 1 has no pretrained backbone**: the training environment used to build the current `tb_classifier.pth` could not reach `download.pytorch.org` or `huggingface.co`, so it's a compact CNN trained from scratch rather than a pretrained EfficientNet-B4. Retrain with a pretrained backbone on a GPU-equipped, network-unrestricted environment for better accuracy (see `model.py`).
+2. **Stage 2's near-perfect metrics reflect its label construction**: `label_drtb` is deterministically derived from a subset of its own input features (see "Why two stages?" above), so validation/test AUROC in the high 0.90s is expected, not evidence of learned signal beyond that rule.
+3. **`DR_TB_using_RoMIA.ipynb` is stale**: it still defines the old fused-model architecture inline and was not updated as part of this change. Use `train_tb_classifier.py` / `train_drtb_risk.py` instead.
 
 ### 🔄 Future Enhancements
 
-- [ ] Retrain model with current architecture for full accuracy
+- [ ] Retrain Stage 1 with a pretrained EfficientNet-B4 backbone on unrestricted network access
+- [ ] Update or retire `DR_TB_using_RoMIA.ipynb` to match the current two-stage architecture
 - [ ] Add batch prediction capability
 - [ ] Implement model versioning
 - [ ] Add more visualization options
@@ -294,11 +322,9 @@ DR-TB research project/
 
 ### Model Training
 
-- **Training Strategy**: Multimodal fusion with attention
-- **Loss Function**: Combined Focal Loss + Dice Loss
-- **Optimization**: AdamW with learning rate scheduling
-- **Augmentation**: MixUp, CutMix, geometric transforms
-- **Class Balancing**: SMOTE for synthetic DR-TB samples
+- **Stage 1 (TB detection)**: compact CNN trained from scratch, AdamW, weighted random sampling for the 700:3500 class imbalance, horizontal flip + rotation augmentation
+- **Stage 2 (DR-TB risk)**: clinical + genomic encoders fused via 2-way multi-head attention, AdamW, weighted random sampling for class imbalance
+- Both stages pick their decision threshold from validation-set F1, not a fixed 0.5 cutoff
 
 ---
 
@@ -369,16 +395,12 @@ DR-TB research project/
 
 ## 📈 Model Metrics Summary
 
-| Metric | Value |
-|--------|-------|
-| AUROC | 0.933 |
-| Accuracy | 87.5% |
-| Precision | 16.1% |
-| Recall | 93.8% |
-| F1-Score | 0.275 |
-| Optimal Threshold | 0.638 |
-
-*Note: Metrics from test set evaluation*
+See `results/models/tb_classifier_metrics.json` (Stage 1) and
+`results/models/drtb_risk_model_metrics.json` (Stage 2) for current test-set
+metrics and each stage's chosen decision threshold. Stage 2's numbers are
+high by construction (see "Why two stages?" above) — treat them as a sanity
+check that the model learned the derivation rule, not as a real-world
+accuracy claim.
 
 ---
 

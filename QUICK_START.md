@@ -61,9 +61,9 @@ If it doesn't open automatically, copy the URL from the terminal and paste it in
    - Wait a few seconds for processing
 
 5. **Check Results**
-   - You should see a prediction (DR-TB or Normal)
-   - Probability and confidence scores
-   - Risk level indicator
+   - You should see two separate results: TB Detection (from the X-ray) and DR-TB Risk (from the clinical/genomic form)
+   - Each has its own probability and confidence score
+   - The X-ray does not affect the DR-TB Risk score, and the form does not affect TB Detection
 
 ### Test 2: Detailed Report
 

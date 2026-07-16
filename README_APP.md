@@ -1,14 +1,15 @@
 # DR-TB Prediction Web Interface
 
-A Streamlit web application for predicting Drug-Resistant Tuberculosis (DR-TB) using a multimodal deep learning model that combines chest X-ray images, clinical metadata, and genomic mutation data.
+A Streamlit web application running **two independent models**: a chest X-ray-only model for TB detection, and a clinical+genomic-only model for Drug-Resistant TB (DR-TB) risk. The two are deliberately kept separate rather than fused — see `PROJECT_OVERVIEW.md`'s "Why two stages?" section for why.
 
 ## Features
 
-- **Multimodal Input**: Accepts chest X-ray images, clinical data, and genomic mutations
-- **Real-time Prediction**: Fast inference using trained deep learning model
-- **Detailed Reports**: Comprehensive diagnostic reports with risk factors and recommendations
-- **User-friendly Interface**: Intuitive web interface built with Streamlit
-- **Exportable Results**: Download prediction reports as text files
+- **TB Detection**: chest X-ray image → TB vs Normal (image-only model)
+- **DR-TB Risk**: clinical data + genomic mutations → risk assessment (no image involved)
+- **Real-time Prediction**: fast inference using both trained models
+- **Detailed Reports**: comprehensive diagnostic reports covering both stages, with risk factors and recommendations
+- **User-friendly Interface**: intuitive web interface built with Streamlit
+- **Exportable Results**: download prediction reports as text files
 
 ## Requirements
 
@@ -156,25 +157,17 @@ Click "📥 Download Report (TXT)" to download a text file containing the comple
 
 ## Model Information
 
-- **Architecture**: Multimodal Fusion Model
-  - CXR Encoder: EfficientNet-B4
-  - Clinical Encoder: Multi-layer neural network (14 features)
-  - Genomic Encoder: Multi-layer neural network (12 features)
-  - Fusion: Multi-head attention mechanism
+- **Stage 1 — TB Detector** (`TBImageClassifier`):
+  - Image-only, compact CNN trained from scratch (no image input's counterpart in Stage 2)
+  - Input: 192x192 CXR image
+  - Threshold and metrics: `results/models/tb_classifier_metrics.json`
 
-- **Input Specifications**:
-  - Image size: 380x380 pixels
-  - Clinical features: 14 features
-  - Genomic features: 12 mutation types
+- **Stage 2 — DR-TB Risk Model** (`DRTBRiskModel`):
+  - Clinical (14 features) + Genomic (12 mutation types) encoders, no image input
+  - Fusion: 2-way multi-head attention (clinical ↔ genomic)
+  - Threshold and metrics: `results/models/drtb_risk_model_metrics.json`
 
-- **Optimal Threshold**: 0.638 (from validation set)
-
-- **Performance** (from evaluation):
-  - AUROC: 0.933
-  - Accuracy: 87.5%
-  - Precision: 16.1%
-  - Recall: 93.8%
-  - F1-Score: 0.275
+See `PROJECT_OVERVIEW.md` for why the two stages don't share a fused prediction, and for the caveats behind each stage's metrics (Stage 1 has no pretrained backbone in this environment; Stage 2's high metrics reflect its label's deterministic construction).
 
 ## Important Notes
 
@@ -246,17 +239,21 @@ Always correlate predictions with:
 
 ```
 DR-TB research project/
-├── app.py                 # Main Streamlit application
-├── model.py               # Model architecture definitions
-├── model_loader.py        # Model loading utilities
-├── preprocessing.py       # Input preprocessing functions
-├── predictor.py           # Prediction logic
-├── report_generator.py    # Detailed report generation
-├── config.py              # Configuration settings
-├── requirements.txt      # Python dependencies
-├── README_APP.md         # This file
+├── app.py                    # Main Streamlit application
+├── model.py                  # Model architecture definitions (both stages)
+├── model_loader.py           # Model loading utilities (both stages)
+├── preprocessing.py          # Input preprocessing functions
+├── predictor.py              # Prediction logic (predict_tb, predict_drtb_risk)
+├── report_generator.py       # Detailed report generation
+├── config.py                 # Configuration settings
+├── prepare_stage1_data.py    # Builds Stage 1 training manifest
+├── prepare_stage2_data.py    # Builds Stage 2 training table
+├── train_tb_classifier.py    # Trains Stage 1
+├── train_drtb_risk.py        # Trains Stage 2
+├── requirements.txt          # Python dependencies
+├── README_APP.md             # This file
 └── results/
-    └── models/           # Model checkpoint files (.pth)
+    └── models/               # tb_classifier.pth, drtb_risk_model.pth + metrics json
 ```
 
 ## Development
@@ -267,20 +264,22 @@ DR-TB research project/
 2. **Report Sections**: Extend `report_generator.py` with new analysis functions
 3. **UI Components**: Update `app.py` to add new Streamlit components
 
-### Customizing Threshold
+### Customizing Thresholds
 
-Edit `config.py` to change the optimal threshold:
-
-```python
-OPTIMAL_THRESHOLD = 0.638  # Change this value
-```
+Each stage picks its own decision threshold from validation-set F1 at training
+time, saved to `results/models/tb_classifier_metrics.json` and
+`results/models/drtb_risk_model_metrics.json` as `optimal_threshold`.
+`model_loader.py` reads it automatically via `config.get_threshold_for_model()`.
+To override, edit the `optimal_threshold` value in the relevant metrics file.
 
 ### Model Updates
 
-When updating the model:
-1. Place new checkpoint in `results/models/`
-2. The app will automatically use the latest model
-3. Or specify model path in `model_loader.py`
+When updating a model:
+1. Place the new checkpoint in `results/models/`, named with the
+   `tb_classifier` or `drtb_risk_model` prefix (see `config.TB_MODEL_PREFIX` /
+   `config.DRTB_RISK_MODEL_PREFIX`)
+2. The app will automatically use the latest checkpoint matching that prefix
+3. Or specify a path directly via `load_tb_classifier(model_path=...)` / `load_drtb_risk_model(model_path=...)` in `model_loader.py`
 
 ## Support
 

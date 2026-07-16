@@ -1,152 +1,110 @@
 """
-Model loading utilities for DR-TB prediction.
-Handles loading saved model checkpoints and initializing the model architecture.
+Model loading utilities for the two-stage TB / DR-TB pipeline.
+
+Stage 1: TBImageClassifier   (CXR -> TB vs Normal)
+Stage 2: DRTBRiskModel       (clinical + genomic -> DR-TB risk)
 """
 
 import torch
-import os
 from pathlib import Path
-from model import MultimodalFusionModel
+from model import TBImageClassifier, DRTBRiskModel
 import config
 
 
-def load_model(model_path=None, device=None):
-    """
-    Load a trained DR-TB prediction model from checkpoint.
-    
-    Args:
-        model_path: Path to model checkpoint (.pth file). If None, uses latest.
-        device: Device to load model on ('cuda' or 'cpu'). If None, auto-detects.
-    
-    Returns:
-        Loaded model in evaluation mode
-    """
-    # Auto-detect device
+def _resolve_device(device=None):
     if device is None:
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    else:
-        device = torch.device(device)
-    
-    # Get model path
-    if model_path is None:
-        model_path = config.get_latest_model_path()
-        if model_path is None:
-            raise FileNotFoundError(
-                f"No model files found in {config.MODELS_DIR}. "
-                "Please ensure model checkpoints exist."
-            )
-    
+        return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    return torch.device(device)
+
+
+def _load_checkpoint(model_path, device):
     model_path = Path(model_path)
     if not model_path.exists():
         raise FileNotFoundError(f"Model file not found: {model_path}")
-    
-    print(f"Loading model from: {model_path}")
-    
-    # Load checkpoint
-    # Note: weights_only=False is safe for local trusted model files
-    # PyTorch 2.6+ defaults to weights_only=True for security, but our models contain numpy objects
     try:
-        checkpoint = torch.load(model_path, map_location=device, weights_only=False)
+        # weights_only=False is safe for local trusted model files
+        return torch.load(model_path, map_location=device, weights_only=False)
     except Exception as e:
         raise RuntimeError(f"Failed to load model checkpoint: {e}")
-    
-    # Extract model state and metadata
-    if isinstance(checkpoint, dict):
-        if 'model_state_dict' in checkpoint:
-            model_state = checkpoint['model_state_dict']
-            # Try to get feature dimensions from checkpoint
-            num_clinical = checkpoint.get('num_clinical_features', config.NUM_CLINICAL_FEATURES)
-            num_genomic = checkpoint.get('num_genomic_features', config.NUM_GENOMIC_FEATURES)
-        else:
-            # Assume entire dict is state dict
-            model_state = checkpoint
-            num_clinical = config.NUM_CLINICAL_FEATURES
-            num_genomic = config.NUM_GENOMIC_FEATURES
-    else:
-        raise ValueError("Invalid checkpoint format")
-    
-    # Create model with correct architecture
-    model = MultimodalFusionModel(
-        num_clinical_features=num_clinical,
-        num_genomic_features=num_genomic,
-        num_classes=1
-    )
-    
-    # Load state dict with flexible matching
-    # Some models may have been saved with different architecture versions
-    try:
-        # Try strict loading first
-        model.load_state_dict(model_state, strict=True)
-    except RuntimeError as e:
-        # If strict loading fails, try flexible loading
-        # This handles architecture differences between training and inference versions
-        print("[WARN] Strict loading failed, attempting flexible loading...")
-        print("   [INFO] This usually means the model was saved with a different architecture version.")
-        try:
-            missing_keys, unexpected_keys = model.load_state_dict(model_state, strict=False)
-            if missing_keys:
-                print(f"   [WARN] Missing keys (using random initialization): {len(missing_keys)} keys")
-                # Only warn about critical missing keys
-                critical_missing = [k for k in missing_keys if 'classifier' in k or 'fusion' in k]
-                if critical_missing:
-                    print(f"   [WARN] WARNING: Critical fusion/classifier layers missing!")
-                    print(f"      This may affect prediction accuracy.")
-                    print(f"      Missing: {', '.join(critical_missing[:3])}...")
-            if unexpected_keys:
-                print(f"   [INFO] Unexpected keys in checkpoint (ignored): {len(unexpected_keys)} keys")
-            print("   [OK] Model loaded with flexible matching (some layers use random weights)")
-        except Exception as e2:
-            raise RuntimeError(f"Failed to load model weights even with flexible loading: {e2}")
-    
-    # Move to device and set to eval mode
+
+
+def load_tb_classifier(model_path=None, device=None):
+    """Load the Stage 1 TB image classifier (CXR -> TB vs Normal)."""
+    device = _resolve_device(device)
+
+    if model_path is None:
+        model_path = config.get_latest_model_path(config.TB_MODEL_PREFIX)
+        if model_path is None:
+            raise FileNotFoundError(
+                f"No TB classifier checkpoint found in {config.MODELS_DIR} "
+                f"(expected a file starting with '{config.TB_MODEL_PREFIX}')."
+            )
+
+    print(f"Loading TB image classifier from: {model_path}")
+    checkpoint = _load_checkpoint(model_path, device)
+    model_state = checkpoint['model_state_dict'] if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint else checkpoint
+
+    model = TBImageClassifier(num_classes=1)
+    model.load_state_dict(model_state, strict=True)
     model = model.to(device)
     model.eval()
-    
-    print(f"[OK] Model loaded successfully on {device}")
-    print(f"   • Clinical features: {num_clinical}")
-    print(f"   • Genomic features: {num_genomic}")
-    
-    return model, device
+
+    threshold = config.get_threshold_for_model(model_path, config.DEFAULT_TB_THRESHOLD)
+    print(f"[OK] TB classifier loaded on {device} (threshold={threshold})")
+    return model, device, threshold
 
 
-def get_model_info(model_path=None):
-    """
-    Get information about a model checkpoint without loading it.
-    
-    Args:
-        model_path: Path to model checkpoint. If None, uses latest.
-    
-    Returns:
-        Dictionary with model information
-    """
+def load_drtb_risk_model(model_path=None, device=None):
+    """Load the Stage 2 DR-TB risk model (clinical + genomic -> risk)."""
+    device = _resolve_device(device)
+
     if model_path is None:
-        model_path = config.get_latest_model_path()
-    
+        model_path = config.get_latest_model_path(config.DRTB_RISK_MODEL_PREFIX)
+        if model_path is None:
+            raise FileNotFoundError(
+                f"No DR-TB risk model checkpoint found in {config.MODELS_DIR} "
+                f"(expected a file starting with '{config.DRTB_RISK_MODEL_PREFIX}')."
+            )
+
+    print(f"Loading DR-TB risk model from: {model_path}")
+    checkpoint = _load_checkpoint(model_path, device)
+    model_state = checkpoint['model_state_dict'] if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint else checkpoint
+
+    model = DRTBRiskModel(
+        num_clinical_features=config.NUM_CLINICAL_FEATURES,
+        num_genomic_features=config.NUM_GENOMIC_FEATURES,
+        num_classes=1
+    )
+    model.load_state_dict(model_state, strict=True)
+    model = model.to(device)
+    model.eval()
+
+    threshold = config.get_threshold_for_model(model_path, config.DEFAULT_DRTB_RISK_THRESHOLD)
+    print(f"[OK] DR-TB risk model loaded on {device} (threshold={threshold})")
+    return model, device, threshold
+
+
+def get_model_info(prefix):
+    """Get information about the latest checkpoint matching a prefix, without loading it."""
+    model_path = config.get_latest_model_path(prefix)
     if model_path is None or not Path(model_path).exists():
         return None
-    
+
     model_path = Path(model_path)
     info = {
         'path': str(model_path),
         'name': model_path.name,
         'size_mb': model_path.stat().st_size / (1024 * 1024),
-        'modified': model_path.stat().st_mtime
+        'modified': model_path.stat().st_mtime,
     }
-    
-    # Try to load checkpoint metadata
-    # Note: weights_only=False is safe for local trusted model files
+
     try:
         checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
         if isinstance(checkpoint, dict):
-            if 'model_state_dict' in checkpoint:
-                info['num_clinical_features'] = checkpoint.get('num_clinical_features', config.NUM_CLINICAL_FEATURES)
-                info['num_genomic_features'] = checkpoint.get('num_genomic_features', config.NUM_GENOMIC_FEATURES)
-                if 'validation_auc' in checkpoint:
-                    info['validation_auc'] = checkpoint['validation_auc']
-                if 'validation_f1' in checkpoint:
-                    info['validation_f1'] = checkpoint['validation_f1']
-    except:
+            for key in ('validation_auc', 'validation_f1', 'validation_accuracy'):
+                if key in checkpoint:
+                    info[key] = checkpoint[key]
+    except Exception:
         pass
-    
-    return info
 
+    return info

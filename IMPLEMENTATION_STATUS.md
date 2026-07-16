@@ -1,5 +1,15 @@
 # Implementation Status - November 2025
 
+> **Superseded (2026-07-16)**: this document describes retraining plans for
+> the old single fused CXR+clinical+genomic model. That architecture was
+> replaced by a two-stage design (`TBImageClassifier` + `DRTBRiskModel` in
+> `model.py`) because its training data paired real X-ray images with
+> unrelated synthetic patient records — see `PROJECT_OVERVIEW.md`'s "Why two
+> stages?" section. The retraining steps below no longer apply; use
+> `prepare_stage1_data.py` / `prepare_stage2_data.py` and
+> `train_tb_classifier.py` / `train_drtb_risk.py` instead. Left in place for
+> historical context.
+
 ## ✅ Completed Setup
 
 ### 1. Dataset Information Scraped
