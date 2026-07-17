@@ -552,7 +552,7 @@ def show_instructions():
 
     #### Model Information
 
-    - **Stage 1 — TB Detector**: EfficientNet-B4, image-only, 380x380 input
+    - **Stage 1 — TB Detector**: compact CNN trained from scratch, image-only, 192x192 input
     - **Stage 2 — DR-TB Risk Model**: Clinical (14 features) + Genomic (12 mutation types) encoders with attention fusion, no image input
     """)
 
