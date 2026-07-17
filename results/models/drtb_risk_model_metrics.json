@@ -1,0 +1,14 @@
+{
+  "optimal_threshold": 0.05,
+  "validation_auc": 0.9853627426580388,
+  "validation_f1": 0.9822695035460993,
+  "test_auc": 0.9891270532603285,
+  "test_accuracy": 0.9809523809523809,
+  "test_precision": 1.0,
+  "test_recall": 0.9790940766550522,
+  "test_f1": 0.9894366197183099,
+  "n_train": 2940,
+  "n_val": 630,
+  "n_test": 630,
+  "note": "label_drtb is derived deterministically from mdr_tb/xdr_tb/rifampin_resistance/isoniazid_resistance/mutation_count (see prepare_stage2_data.py). High metrics reflect that construction, not a claim of predictive power beyond it."
+}

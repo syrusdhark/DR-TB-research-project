@@ -1,0 +1,15 @@
+{
+  "optimal_threshold": 0.94,
+  "validation_auc": 0.9986031746031745,
+  "validation_f1": 0.9765258215962441,
+  "test_auc": 0.9999274376417233,
+  "test_accuracy": 0.9984126984126984,
+  "test_precision": 1.0,
+  "test_recall": 0.9904761904761905,
+  "test_f1": 0.9952153110047847,
+  "n_train": 2940,
+  "n_val": 630,
+  "n_test": 630,
+  "image_size": 192,
+  "note": "Compact CNN trained from scratch (no ImageNet pretraining -- download.pytorch.org and huggingface.co are blocked in this training environment). Each image used exactly once, label taken directly from its source folder (Tuberculosis/ vs Normal/)."
+}
