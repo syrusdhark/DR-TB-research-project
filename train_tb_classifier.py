@@ -148,6 +148,15 @@ def main():
             best_val_auc = val_auc
             best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
             patience_counter = 0
+
+            # Save after every improvement so an interrupted run still leaves
+            # a usable checkpoint behind instead of losing all progress.
+            MODELS_DIR.mkdir(parents=True, exist_ok=True)
+            torch.save({
+                "model_state_dict": best_state,
+                "validation_auc": best_val_auc,
+                "epoch": epoch,
+            }, MODELS_DIR / f"{config.TB_MODEL_PREFIX}.pth")
         else:
             patience_counter += 1
 
