@@ -14,7 +14,7 @@ The system provides both simple predictions and detailed diagnostic reports to a
 
 - **Architecture change**: the previous single fused model (CXR + clinical + genomic → one DR-TB prediction) was replaced with two independent models. See "Why two stages?" below — the fused model's image branch had no valid basis to inform the resistance decision.
 - **Deployment state**: Streamlit UI (`app.py`) remains the primary entry point; inference runs locally with Python 3.12, PyTorch, on CPU or GPU.
-- **Model health**: Stage 2 (DR-TB risk) reaches very high validation/test metrics because its label is deterministically derived from a subset of its own input fields — see `results/models/drtb_risk_model_metrics.json` for the exact numbers and caveat. Stage 1 (TB detection) is a compact CNN trained from scratch (no ImageNet pretraining was available in the training environment — see below) — see `results/models/tb_classifier_metrics.json`.
+- **Model health**: Stage 1 (TB detection) reaches test AUROC 0.9999 / accuracy 99.8% — a genuine result, since TB vs Normal from real X-rays is a well-established, learnable task. Stage 2 (DR-TB risk) reaches similarly high validation/test metrics (~0.99 AUROC), but for a different reason — its label is deterministically derived from a subset of its own input fields, so treat that number as a sanity check, not a real-world accuracy claim. See `results/models/tb_classifier_metrics.json` and `results/models/drtb_risk_model_metrics.json` for exact numbers.
 - **Known limitation**: Stage 1 was trained without ImageNet-pretrained weights because `download.pytorch.org` and `huggingface.co` were both blocked by the training environment's network policy. A pretrained EfficientNet-B4 backbone (the original design) should outperform this from-scratch CNN and is recommended if retraining somewhere with normal network access — see `model.py`'s `TBImageClassifier` docstring for the exact swap.
 - **Stale artifacts**: `DR_TB_using_RoMIA.ipynb` still defines the old fused-model architecture inline and is out of date relative to `model.py`. Treat `scripts/train_tb_classifier.py` and `scripts/train_drtb_risk.py` as the canonical training path, not the notebook.
 
@@ -23,7 +23,7 @@ The system provides both simple predictions and detailed diagnostic reports to a
 ## Why two stages? (the bug this replaced)
 
 The original model fused a CXR image with clinical and genomic features into
-one DR-TB prediction. Its training data (`merged_dataset.csv`) reused each of
+one DR-TB prediction. Its training data (`merged_dataset.csv`, since deleted) reused each of
 the 4,200 real chest X-ray images up to 53 times, pairing the same image with
 different independently-generated synthetic patient records to manufacture a
 balanced (50/50) label. That means the same X-ray appeared in training under
@@ -203,7 +203,6 @@ DR-TB research project/
 │   └── archive/                  # Superseded docs, kept for history
 │
 ├── data/
-│   ├── merged_dataset.csv       # DEPRECATED -- old fused-model dataset, no longer used (see "Why two stages?")
 │   ├── clinical_data.csv        # Per-patient clinical metadata (4,200 patients)
 │   ├── genomic_mutations.csv    # Per-patient genomic mutation data (4,200 patients)
 │   ├── tb_image_manifest.csv    # Stage 1 training manifest (1 row per real image)

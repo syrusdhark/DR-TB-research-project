@@ -45,7 +45,7 @@ docs/
 
 data/                     clinical_data.csv, genomic_mutations.csv (real per-patient tables, tracked in git)
                           + tb_image_manifest.csv, drtb_risk_dataset.csv (derived, gitignored, regenerate via scripts/)
-                          + merged_dataset.csv (DEPRECATED, kept for history — see below, don't use it)
+                          (merged_dataset.csv, the old fused-model dataset, was deleted — see "Why two stages?")
 TB_Chest_Radiography_Database/   700 Tuberculosis + 3500 Normal CXR images (gitignored, present on disk)
 results/models/           tb_classifier.pth + tb_classifier_metrics.json
                           drtb_risk_model.pth + drtb_risk_model_metrics.json
@@ -58,8 +58,9 @@ The original design was a single fused model (`MultimodalFusionModel`) that
 took CXR + clinical + genomic features together and predicted DR-TB directly.
 It was replaced because:
 
-1. **The training data faked the image-resistance link.** `data/merged_dataset.csv`
-   paired each of the 4,200 real X-ray images with independently-generated
+1. **The training data faked the image-resistance link.** The old
+   `data/merged_dataset.csv` (since deleted) paired each of the 4,200 real
+   X-ray images with independently-generated
    synthetic patient records, reusing individual images up to 53 times each
    to force a balanced label. The same image appeared under both DR-TB-positive
    and DR-TB-negative labels across different rows — so the CXR branch had no
@@ -166,11 +167,12 @@ All four scripts resolve paths relative to the repo root via
 ## Conventions worth knowing
 
 - **`data/` and `TB_Chest_Radiography_Database/` are gitignored by default**,
-  but `data/clinical_data.csv`, `data/genomic_mutations.csv`, and
-  `data/merged_dataset.csv` are force-tracked exceptions (see `.gitignore`).
-  Derived files (`tb_image_manifest.csv`, `drtb_risk_dataset.csv`) are *not*
-  tracked — regenerate them via the `scripts/prepare_*` scripts rather than
-  expecting them to exist after a fresh clone.
+  but `data/clinical_data.csv` and `data/genomic_mutations.csv` are
+  force-tracked exceptions (added with `git add -f` originally; there's no
+  explicit negation pattern in `.gitignore` for them). Derived files
+  (`tb_image_manifest.csv`, `drtb_risk_dataset.csv`) are *not* tracked —
+  regenerate them via the `scripts/prepare_*` scripts rather than expecting
+  them to exist after a fresh clone.
 - **`results/models/*.pth` and `*.json` are tracked** (gitignore has explicit
   exceptions for them) — checkpoints are meant to be committed.
 - **Training scripts save the best checkpoint after every validation
