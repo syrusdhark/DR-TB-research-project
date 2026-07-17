@@ -21,10 +21,10 @@ input features:
 from pathlib import Path
 import pandas as pd
 
-BASE_DIR = Path(__file__).parent
-CLINICAL_CSV = BASE_DIR / "data" / "clinical_data.csv"
-GENOMIC_CSV = BASE_DIR / "data" / "genomic_mutations.csv"
-OUTPUT_CSV = BASE_DIR / "data" / "drtb_risk_dataset.csv"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+CLINICAL_CSV = REPO_ROOT / "data" / "clinical_data.csv"
+GENOMIC_CSV = REPO_ROOT / "data" / "genomic_mutations.csv"
+OUTPUT_CSV = REPO_ROOT / "data" / "drtb_risk_dataset.csv"
 
 REGIONS = ["Africa", "Americas", "Asia", "Europe"]
 

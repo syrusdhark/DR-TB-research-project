@@ -16,7 +16,7 @@ The system provides both simple predictions and detailed diagnostic reports to a
 - **Deployment state**: Streamlit UI (`app.py`) remains the primary entry point; inference runs locally with Python 3.12, PyTorch, on CPU or GPU.
 - **Model health**: Stage 2 (DR-TB risk) reaches very high validation/test metrics because its label is deterministically derived from a subset of its own input fields — see `results/models/drtb_risk_model_metrics.json` for the exact numbers and caveat. Stage 1 (TB detection) is a compact CNN trained from scratch (no ImageNet pretraining was available in the training environment — see below) — see `results/models/tb_classifier_metrics.json`.
 - **Known limitation**: Stage 1 was trained without ImageNet-pretrained weights because `download.pytorch.org` and `huggingface.co` were both blocked by the training environment's network policy. A pretrained EfficientNet-B4 backbone (the original design) should outperform this from-scratch CNN and is recommended if retraining somewhere with normal network access — see `model.py`'s `TBImageClassifier` docstring for the exact swap.
-- **Stale artifacts**: `DR_TB_using_RoMIA.ipynb` still defines the old fused-model architecture inline and is out of date relative to `model.py`. Treat `train_tb_classifier.py` and `train_drtb_risk.py` as the canonical training path, not the notebook.
+- **Stale artifacts**: `DR_TB_using_RoMIA.ipynb` still defines the old fused-model architecture inline and is out of date relative to `model.py`. Treat `scripts/train_tb_classifier.py` and `scripts/train_drtb_risk.py` as the canonical training path, not the notebook.
 
 ---
 
@@ -37,7 +37,7 @@ Separately, the label itself (`label_drtb` in the old merged dataset)
 contradicted the fields it should be derived from — e.g. patients with both
 MDR-TB and XDR-TB confirmed were labeled DR-TB-**negative** 100% of the time.
 The current Stage 2 dataset (`data/drtb_risk_dataset.csv`, built by
-`prepare_stage2_data.py`) instead derives the label deterministically and
+`scripts/prepare_stage2_data.py`) instead derives the label deterministically and
 consistently:
 ```
 label_drtb = 1  if  mdr_tb OR xdr_tb OR rifampin_resistance
@@ -113,12 +113,12 @@ claim of predictive power beyond it.
 
 ### Input Modalities
 
-#### 1. **Chest X-Ray Image**
+#### 1. **Chest X-Ray Image** (Stage 1 input only)
 - Supported formats: PNG, JPG, JPEG
-- Automatic preprocessing to 380x380 pixels
+- Automatic preprocessing to 192x192 pixels
 - ImageNet normalization
 
-#### 2. **Clinical Data**
+#### 2. **Clinical Data** (Stage 2 input only)
 - **Demographics**:
   - Age (0-150 years)
   - Gender (Male/Female)
@@ -140,7 +140,7 @@ claim of predictive power beyond it.
   - Rifampin Resistance
   - Isoniazid Resistance
 
-#### 3. **Genomic Mutations**
+#### 3. **Genomic Mutations** (Stage 2 input only)
 - **Rifampin Resistance (rpoB)**:
   - S531L, S450L, H526Y, H445Y, D435V
 
@@ -155,17 +155,16 @@ claim of predictive power beyond it.
 
 ### Output Features
 
-#### Simple Prediction View
-- **Prediction Badge**: Color-coded (Red for DR-TB, Green for Normal)
-- **Probability**: Model confidence (0-100%)
-- **Confidence Score**: Distance from threshold
-- **Risk Level**: High, Medium, or Low
+#### Simple Prediction View (two separate results, not one fused number)
+- **TB Detection badge** (Stage 1, image-only): Tuberculosis/Normal, probability, confidence
+- **DR-TB Risk badge** (Stage 2, clinical+genomic-only): DR-TB Risk/Low Risk, probability, confidence
+- **Risk Level**: High, Medium, or Low, shown per stage
 
 #### Detailed Report
-- **Prediction Summary**: Full interpretation with probability and confidence
+- **Stage 1 & Stage 2 Summaries**: Full interpretation with probability and confidence for each
 - **Identified Risk Factors**: All relevant clinical risk factors with severity levels
 - **Genomic Mutation Analysis**: Detected mutations with significance
-- **Modality Contributions**: Which input type contributed most (CXR/Clinical/Genomic)
+- **DR-TB Risk Modality Contributions**: Which of Clinical/Genomic contributed most to the Stage 2 score (Stage 1's image score is separate and not part of this breakdown)
 - **Clinical Recommendations**: Priority-based action items
 
 ---
@@ -184,14 +183,24 @@ DR-TB research project/
 ├── requirements.txt             # Python dependencies
 ├── run_app.sh                   # Startup script
 │
-├── README_APP.md                # Application documentation
-├── QUICK_START.md              # Quick start guide
-├── PROJECT_OVERVIEW.md         # This file
+├── README.md                    # Application documentation
+├── CLAUDE.md                    # Project reference for Claude Code
 │
-├── prepare_stage1_data.py       # Builds data/tb_image_manifest.csv (Stage 1)
-├── prepare_stage2_data.py       # Builds data/drtb_risk_dataset.csv (Stage 2)
-├── train_tb_classifier.py       # Trains Stage 1 (TB image classifier)
-├── train_drtb_risk.py           # Trains Stage 2 (DR-TB risk model)
+├── scripts/
+│   ├── prepare_stage1_data.py   # Builds data/tb_image_manifest.csv (Stage 1)
+│   ├── prepare_stage2_data.py   # Builds data/drtb_risk_dataset.csv (Stage 2)
+│   ├── train_tb_classifier.py   # Trains Stage 1 (TB image classifier)
+│   ├── train_drtb_risk.py       # Trains Stage 2 (DR-TB risk model)
+│   └── verify_pipeline.py       # End-to-end smoke test (no browser needed)
+│
+├── docs/
+│   ├── PROJECT_OVERVIEW.md      # This file
+│   ├── QUICK_START.md           # Quick start guide
+│   ├── STREAMLIT_DEPLOYMENT.md
+│   ├── MEDICAL_HISTORY_STRUCTURE.md
+│   ├── MEMORY_OPTIMIZATION_GUIDE.md
+│   ├── data-sources/             # Data provenance notes
+│   └── archive/                  # Superseded docs, kept for history
 │
 ├── data/
 │   ├── merged_dataset.csv       # DEPRECATED -- old fused-model dataset, no longer used (see "Why two stages?")
@@ -286,7 +295,7 @@ DR-TB research project/
 
 1. **Stage 1 has no pretrained backbone**: the training environment used to build the current `tb_classifier.pth` could not reach `download.pytorch.org` or `huggingface.co`, so it's a compact CNN trained from scratch rather than a pretrained EfficientNet-B4. Retrain with a pretrained backbone on a GPU-equipped, network-unrestricted environment for better accuracy (see `model.py`).
 2. **Stage 2's near-perfect metrics reflect its label construction**: `label_drtb` is deterministically derived from a subset of its own input features (see "Why two stages?" above), so validation/test AUROC in the high 0.90s is expected, not evidence of learned signal beyond that rule.
-3. **`DR_TB_using_RoMIA.ipynb` is stale**: it still defines the old fused-model architecture inline and was not updated as part of this change. Use `train_tb_classifier.py` / `train_drtb_risk.py` instead.
+3. **`DR_TB_using_RoMIA.ipynb` is stale**: it still defines the old fused-model architecture inline and was not updated as part of this change. Use `scripts/train_tb_classifier.py` / `scripts/train_drtb_risk.py` instead.
 
 ### 🔄 Future Enhancements
 
@@ -415,7 +424,7 @@ accuracy claim.
 
 ## 📞 Support & Documentation
 
-- **Application Guide**: See `README_APP.md`
+- **Application Guide**: See `../README.md`
 - **Quick Start**: See `QUICK_START.md`
 - **Training Details**: See `DR_TB_using_RoMIA.ipynb`
 

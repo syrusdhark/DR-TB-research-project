@@ -3,8 +3,12 @@ End-to-end smoke test for the two-stage pipeline, mirroring what app.py does
 on a single "Run Prediction" click, without needing a browser.
 """
 
+import sys
 from pathlib import Path
 from PIL import Image
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
 
 import config
 from model_loader import load_tb_classifier, load_drtb_risk_model, get_model_info
@@ -12,7 +16,7 @@ from preprocessing import preprocess_image, encode_clinical_features, encode_gen
 from predictor import predict_tb, predict_drtb_risk
 from report_generator import generate_report, format_report_text
 
-BASE_DIR = Path(__file__).parent
+BASE_DIR = REPO_ROOT
 
 
 def main():

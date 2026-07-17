@@ -1,6 +1,6 @@
 # DR-TB Prediction Web Interface
 
-A Streamlit web application running **two independent models**: a chest X-ray-only model for TB detection, and a clinical+genomic-only model for Drug-Resistant TB (DR-TB) risk. The two are deliberately kept separate rather than fused — see `PROJECT_OVERVIEW.md`'s "Why two stages?" section for why.
+A Streamlit web application running **two independent models**: a chest X-ray-only model for TB detection, and a clinical+genomic-only model for Drug-Resistant TB (DR-TB) risk. The two are deliberately kept separate rather than fused — see `docs/PROJECT_OVERVIEW.md`'s "Why two stages?" section for why.
 
 ## Features
 
@@ -167,7 +167,7 @@ Click "📥 Download Report (TXT)" to download a text file containing the comple
   - Fusion: 2-way multi-head attention (clinical ↔ genomic)
   - Threshold and metrics: `results/models/drtb_risk_model_metrics.json`
 
-See `PROJECT_OVERVIEW.md` for why the two stages don't share a fused prediction, and for the caveats behind each stage's metrics (Stage 1 has no pretrained backbone in this environment; Stage 2's high metrics reflect its label's deterministic construction).
+See `docs/PROJECT_OVERVIEW.md` for why the two stages don't share a fused prediction, and for the caveats behind each stage's metrics (Stage 1 has no pretrained backbone in this environment; Stage 2's high metrics reflect its label's deterministic construction).
 
 ## Important Notes
 
@@ -238,7 +238,7 @@ Always correlate predictions with:
 ## File Structure
 
 ```
-DR-TB research project/
+DR-TB-research-project/
 ├── app.py                    # Main Streamlit application
 ├── model.py                  # Model architecture definitions (both stages)
 ├── model_loader.py           # Model loading utilities (both stages)
@@ -246,12 +246,27 @@ DR-TB research project/
 ├── predictor.py              # Prediction logic (predict_tb, predict_drtb_risk)
 ├── report_generator.py       # Detailed report generation
 ├── config.py                 # Configuration settings
-├── prepare_stage1_data.py    # Builds Stage 1 training manifest
-├── prepare_stage2_data.py    # Builds Stage 2 training table
-├── train_tb_classifier.py    # Trains Stage 1
-├── train_drtb_risk.py        # Trains Stage 2
 ├── requirements.txt          # Python dependencies
-├── README_APP.md             # This file
+├── run_app.sh                # Startup script
+├── README.md                 # This file
+├── CLAUDE.md                 # Project reference for Claude Code
+│
+├── scripts/
+│   ├── prepare_stage1_data.py    # Builds Stage 1 training manifest
+│   ├── prepare_stage2_data.py    # Builds Stage 2 training table
+│   ├── train_tb_classifier.py    # Trains Stage 1
+│   ├── train_drtb_risk.py        # Trains Stage 2
+│   └── verify_pipeline.py        # End-to-end smoke test (no browser needed)
+│
+├── docs/
+│   ├── PROJECT_OVERVIEW.md       # Architecture, data flow, "why two stages?"
+│   ├── QUICK_START.md
+│   ├── STREAMLIT_DEPLOYMENT.md
+│   ├── MEDICAL_HISTORY_STRUCTURE.md
+│   ├── MEMORY_OPTIMIZATION_GUIDE.md
+│   ├── data-sources/              # Data provenance notes
+│   └── archive/                   # Superseded docs, kept for history
+│
 └── results/
     └── models/               # tb_classifier.pth, drtb_risk_model.pth + metrics json
 ```

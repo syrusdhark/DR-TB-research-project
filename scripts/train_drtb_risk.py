@@ -15,6 +15,7 @@ diabetes, smoking, region, etc.) via the attention fusion.
 """
 
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -25,12 +26,14 @@ from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, f1_score, accuracy_score, precision_score, recall_score
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
 import config
 from model import DRTBRiskModel
 
-BASE_DIR = Path(__file__).parent
-DATA_CSV = BASE_DIR / "data" / "drtb_risk_dataset.csv"
-MODELS_DIR = BASE_DIR / "results" / "models"
+DATA_CSV = REPO_ROOT / "data" / "drtb_risk_dataset.csv"
+MODELS_DIR = REPO_ROOT / "results" / "models"
 
 SEED = 42
 torch.manual_seed(SEED)

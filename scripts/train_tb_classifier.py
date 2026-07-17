@@ -9,6 +9,7 @@ clinical/genomic data involved.
 
 import json
 import time
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -21,10 +22,13 @@ from PIL import Image
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score, f1_score, accuracy_score, precision_score, recall_score
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
 import config
 from model import TBImageClassifier
 
-BASE_DIR = Path(__file__).parent
+BASE_DIR = REPO_ROOT
 MANIFEST_CSV = BASE_DIR / "data" / "tb_image_manifest.csv"
 MODELS_DIR = BASE_DIR / "results" / "models"
 

@@ -10,9 +10,9 @@ directly from its source folder (Tuberculosis/ = 1, Normal/ = 0).
 import csv
 from pathlib import Path
 
-BASE_DIR = Path(__file__).parent
-IMAGE_ROOT = BASE_DIR / "TB_Chest_Radiography_Database"
-OUTPUT_CSV = BASE_DIR / "data" / "tb_image_manifest.csv"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+IMAGE_ROOT = REPO_ROOT / "TB_Chest_Radiography_Database"
+OUTPUT_CSV = REPO_ROOT / "data" / "tb_image_manifest.csv"
 
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 
@@ -21,7 +21,7 @@ def collect_images(folder: Path, label: int):
     rows = []
     for path in sorted(folder.iterdir()):
         if path.suffix.lower() in IMAGE_EXTENSIONS:
-            rows.append((str(path.relative_to(BASE_DIR)), label))
+            rows.append((str(path.relative_to(REPO_ROOT)), label))
     return rows
 
 
